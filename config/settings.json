@@ -1,0 +1,14 @@
+{
+  "calendar": {
+    "day_start_hour": 6,
+    "day_end_hour": 19,
+    "back_to_back_gap_minutes": 15,
+    "deep_work_min_minutes": 60
+  },
+  "github": {
+    "active_statuses": ["ready to work", "in progress"]
+  },
+  "briefing": {
+    "max_tokens": 1024
+  }
+}

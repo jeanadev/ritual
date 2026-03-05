@@ -1,0 +1,194 @@
+#!/usr/bin/env python3
+"""
+fetch-calendar.py
+Pulls today's events from Google Calendar (6am–7pm window).
+Outputs a formatted markdown block for injection into the morning prompt.
+
+Auth: OAuth 2.0. On first run, opens a browser for authorization.
+Token is cached in config/token.json and refreshes automatically.
+
+Setup (one-time):
+  1. Create a Google Cloud project at console.cloud.google.com
+  2. Enable the Google Calendar API
+  3. Create OAuth 2.0 credentials (Desktop app type)
+  4. Download as credentials.json → place in config/credentials.json
+  5. pip install google-auth-oauthlib google-auth-httplib2 google-api-python-client
+"""
+
+import datetime
+import os
+import sys
+import json
+from pathlib import Path
+
+# Resolve paths relative to this script's location
+SCRIPT_DIR = Path(__file__).parent
+ROOT_DIR = SCRIPT_DIR.parent
+CONFIG_DIR = ROOT_DIR / "config"
+CREDENTIALS_FILE = CONFIG_DIR / "credentials.json"
+TOKEN_FILE = CONFIG_DIR / "token.json"
+
+SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+
+# Window: 6am–7pm local time
+DAY_START_HOUR = 6
+DAY_END_HOUR = 19
+
+
+def get_credentials():
+    from google.oauth2.credentials import Credentials
+    from google_auth_oauthlib.flow import InstalledAppFlow
+    from google.auth.transport.requests import Request
+
+    creds = None
+
+    if TOKEN_FILE.exists():
+        creds = Credentials.from_authorized_user_file(str(TOKEN_FILE), SCOPES)
+
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            if not CREDENTIALS_FILE.exists():
+                print(
+                    f"ERROR: credentials.json not found at {CREDENTIALS_FILE}\n"
+                    "Follow setup instructions in this file's header comment.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
+            flow = InstalledAppFlow.from_client_secrets_file(
+                str(CREDENTIALS_FILE), SCOPES
+            )
+            creds = flow.run_local_server(port=0)
+        TOKEN_FILE.write_text(creds.to_json())
+
+    return creds
+
+
+def format_event(event):
+    """Format a single event as a time-block line."""
+    start = event.get("start", {})
+    end = event.get("end", {})
+    summary = event.get("summary", "(no title)")
+
+    # Skip all-day events (dateTime vs date)
+    if "dateTime" not in start:
+        return None
+
+    start_dt = datetime.datetime.fromisoformat(start["dateTime"])
+    end_dt = datetime.datetime.fromisoformat(end["dateTime"])
+
+    start_str = start_dt.strftime("%-I:%M%p").lower().replace(":00", "")
+    end_str = end_dt.strftime("%-I:%M%p").lower().replace(":00", "")
+
+    # Flag back-to-back potential (captured in caller, not here)
+    return {
+        "start": start_dt,
+        "end": end_dt,
+        "line": f"{start_str}–{end_str} — {summary}",
+    }
+
+
+def detect_back_to_back(events, gap_minutes=15):
+    """Return list of (event_a, event_b) pairs that are back-to-back."""
+    pairs = []
+    for i in range(len(events) - 1):
+        gap = events[i + 1]["start"] - events[i]["end"]
+        if gap.total_seconds() / 60 <= gap_minutes:
+            pairs.append((events[i], events[i + 1]))
+    return pairs
+
+
+def get_deep_work_windows(events, start_hour=6, end_hour=19, min_gap_minutes=60):
+    """Find unscheduled blocks >= min_gap_minutes."""
+    windows = []
+    day = datetime.date.today()
+    cursor = datetime.datetime.combine(day, datetime.time(start_hour, 0)).astimezone()
+
+    for event in events:
+        gap = event["start"] - cursor
+        if gap.total_seconds() / 60 >= min_gap_minutes:
+            windows.append(
+                f"{cursor.strftime('%-I:%M%p').lower()}–{event['start'].strftime('%-I:%M%p').lower()}"
+            )
+        cursor = max(cursor, event["end"])
+
+    end_of_day = datetime.datetime.combine(day, datetime.time(end_hour, 0)).astimezone()
+    gap = end_of_day - cursor
+    if gap.total_seconds() / 60 >= min_gap_minutes:
+        windows.append(
+            f"{cursor.strftime('%-I:%M%p').lower()}–{end_of_day.strftime('%-I:%M%p').lower()}"
+        )
+
+    return windows
+
+
+def main():
+    try:
+        from googleapiclient.discovery import build
+    except ImportError:
+        print(
+            "ERROR: Google API client not installed.\n"
+            "Run: pip install google-auth-oauthlib google-auth-httplib2 google-api-python-client",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    creds = get_credentials()
+    service = build("calendar", "v3", credentials=creds)
+
+    today = datetime.date.today()
+    time_min = datetime.datetime.combine(
+        today, datetime.time(DAY_START_HOUR, 0)
+    ).astimezone().isoformat()
+    time_max = datetime.datetime.combine(
+        today, datetime.time(DAY_END_HOUR, 0)
+    ).astimezone().isoformat()
+
+    result = (
+        service.events()
+        .list(
+            calendarId="primary",
+            timeMin=time_min,
+            timeMax=time_max,
+            singleEvents=True,
+            orderBy="startTime",
+        )
+        .execute()
+    )
+
+    raw_events = result.get("items", [])
+    formatted = [format_event(e) for e in raw_events]
+    formatted = [e for e in formatted if e is not None]
+
+    # Build output block
+    lines = []
+    for e in formatted:
+        lines.append(e["line"])
+
+    # Annotations
+    bb_pairs = detect_back_to_back(formatted)
+    if bb_pairs:
+        lines.append("")
+        for a, b in bb_pairs:
+            lines.append(
+                f"⚠️  Back-to-back: {a['line'].split('—')[0].strip()} → {b['line'].split('—')[0].strip()}"
+            )
+
+    deep_windows = get_deep_work_windows(formatted)
+    if deep_windows:
+        lines.append("")
+        lines.append(f"🕐 Deep work window(s): {', '.join(deep_windows)}")
+    else:
+        lines.append("")
+        lines.append("⚠️  No deep work windows found today")
+
+    meeting_count = len(formatted)
+    if meeting_count >= 4:
+        lines.append(f"⚠️  Meeting-heavy day ({meeting_count} events)")
+
+    print("\n".join(lines))
+
+
+if __name__ == "__main__":
+    main()

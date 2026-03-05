@@ -191,3 +191,9 @@ notes/
 **API key error:** Confirm `ANTHROPIC_API_KEY` starts with `sk-ant-` and is active at console.anthropic.com.
 
 **Daily note doesn't update in VS Code:** VS Code doesn't auto-reload externally modified files. Close and reopen the file after running `end-workday`.
+
+---
+
+## Acknowledgments
+
+Inspired by [Jesse Gardner](https://www.linkedin.com/posts/plasticmind_every-morning-i-type-start-workday-into-activity-7434806560742207488-b7lO) whose LinkedIn post about his `start-workday` workflow started this whole thing.

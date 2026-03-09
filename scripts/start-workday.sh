@@ -82,19 +82,22 @@ GITHUB_BLOCK=$(python3 "$SCRIPTS_DIR/fetch-github.py" 2>/tmp/ritual-gh-err.txt) 
 # Extract just the PR section for verbatim append to note
 PR_BLOCK=$(echo "$GITHUB_BLOCK" | awk '/^### PRs/,0')
 
-# ── 4. Carry-forward from yesterday ────────────────────────────────────────────
+# ── 4. Carry-forward from last working day ───────────────────────────────────
+# Looks back up to 4 days to handle weekends and long weekends
 
-YESTERDAY=$(date -v-1d +%Y-%m-%d 2>/dev/null || date -d "yesterday" +%Y-%m-%d)
-YESTERDAY_NOTE="$NOTES_DIR/$YESTERDAY.md"
 CARRY_FORWARD=""
 
-if [[ -f "$YESTERDAY_NOTE" ]]; then
-  # Extract the 'tomorrow' field from YAML frontmatter
-  TOMORROW_VALUE=$(awk '/^---/{f++} f==1 && /^tomorrow:/{sub(/^tomorrow: */, ""); print; exit}' "$YESTERDAY_NOTE")
-  if [[ -n "$TOMORROW_VALUE" ]]; then
-    CARRY_FORWARD="\"$TOMORROW_VALUE\"\n— from $YESTERDAY"
+for DAYS_BACK in 1 2 3 4; do
+  PAST_DATE=$(date -v-${DAYS_BACK}d +%Y-%m-%d 2>/dev/null || date -d "${DAYS_BACK} days ago" +%Y-%m-%d)
+  PAST_NOTE="$NOTES_DIR/$PAST_DATE.md"
+  if [[ -f "$PAST_NOTE" ]]; then
+    TOMORROW_VALUE=$(awk '/^---/{f++} f==1 && /^tomorrow:/{sub(/^tomorrow: */, ""); print; exit}' "$PAST_NOTE")
+    if [[ -n "$TOMORROW_VALUE" ]]; then
+      CARRY_FORWARD="\"$TOMORROW_VALUE\"\n— from $PAST_DATE"
+      break
+    fi
   fi
-fi
+done
 
 if [[ -z "$CARRY_FORWARD" ]]; then
   CARRY_FORWARD="(none)"

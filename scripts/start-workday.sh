@@ -140,7 +140,7 @@ SYSTEM_PROMPT="You are a focused daily briefing assistant. Given a brain dump, a
 Output format — markdown, max 400 words:
 
 ## Schedule
-List today's events as time blocks. Flag back-to-back sequences, meeting-heavy days, and where the only deep work windows are.
+One bullet per event, format: - TIME–TIME — Event title. Each event on its own line, no grouping or summarizing. After the list, add a single line flagging back-to-back sequences, meeting-heavy days, and deep work windows.
 
 ## Focus (Top 3)
 Derive from: GitHub priority + calendar breathing room + anything surfaced in the brain dump that isn't already captured. Number them. Include issue/PR number and title where applicable.

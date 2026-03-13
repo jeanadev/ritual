@@ -18,6 +18,8 @@ Setup (one-time):
 import datetime
 import os
 import sys
+import warnings
+warnings.filterwarnings("ignore")
 import json
 from pathlib import Path
 
@@ -30,9 +32,17 @@ TOKEN_FILE = CONFIG_DIR / "token.json"
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 
-# Window: 6am–7pm local time
-DAY_START_HOUR = 6
-DAY_END_HOUR = 19
+# Load settings
+SETTINGS_FILE = CONFIG_DIR / "settings.json"
+_settings = json.loads(SETTINGS_FILE.read_text()) if SETTINGS_FILE.exists() else {}
+_cal = _settings.get("calendar", {})
+
+DAY_START_HOUR = _cal.get("day_start_hour", 7)
+DAY_START_MINUTE = _cal.get("day_start_minute", 30)
+DAY_END_HOUR = _cal.get("day_end_hour", 17)
+DAY_END_MINUTE = _cal.get("day_end_minute", 30)
+BACK_TO_BACK_GAP = _cal.get("back_to_back_gap_minutes", 15)
+DEEP_WORK_MIN = _cal.get("deep_work_min_minutes", 60)
 
 
 def get_credentials():
@@ -103,7 +113,7 @@ def get_deep_work_windows(events, start_hour=6, end_hour=19, min_gap_minutes=60)
     """Find unscheduled blocks >= min_gap_minutes."""
     windows = []
     day = datetime.date.today()
-    cursor = datetime.datetime.combine(day, datetime.time(start_hour, 0)).astimezone()
+    cursor = datetime.datetime.combine(day, datetime.time(DAY_START_HOUR, DAY_START_MINUTE)).astimezone()
 
     for event in events:
         gap = event["start"] - cursor
@@ -113,7 +123,7 @@ def get_deep_work_windows(events, start_hour=6, end_hour=19, min_gap_minutes=60)
             )
         cursor = max(cursor, event["end"])
 
-    end_of_day = datetime.datetime.combine(day, datetime.time(end_hour, 0)).astimezone()
+    end_of_day = datetime.datetime.combine(day, datetime.time(DAY_END_HOUR, DAY_END_MINUTE)).astimezone()
     gap = end_of_day - cursor
     if gap.total_seconds() / 60 >= min_gap_minutes:
         windows.append(
@@ -139,10 +149,10 @@ def main():
 
     today = datetime.date.today()
     time_min = datetime.datetime.combine(
-        today, datetime.time(DAY_START_HOUR, 0)
+        today, datetime.time(DAY_START_HOUR, DAY_START_MINUTE)
     ).astimezone().isoformat()
     time_max = datetime.datetime.combine(
-        today, datetime.time(DAY_END_HOUR, 0)
+        today, datetime.time(DAY_END_HOUR, DAY_END_MINUTE)
     ).astimezone().isoformat()
 
     result = (
@@ -167,7 +177,7 @@ def main():
         lines.append(e["line"])
 
     # Annotations
-    bb_pairs = detect_back_to_back(formatted)
+    bb_pairs = detect_back_to_back(formatted, gap_minutes=BACK_TO_BACK_GAP)
     if bb_pairs:
         lines.append("")
         for a, b in bb_pairs:
@@ -175,7 +185,7 @@ def main():
                 f"⚠️  Back-to-back: {a['line'].split('—')[0].strip()} → {b['line'].split('—')[0].strip()}"
             )
 
-    deep_windows = get_deep_work_windows(formatted)
+    deep_windows = get_deep_work_windows(formatted, start_hour=DAY_START_HOUR, end_hour=DAY_END_HOUR, min_gap_minutes=DEEP_WORK_MIN)
     if deep_windows:
         lines.append("")
         lines.append(f"🕐 Deep work window(s): {', '.join(deep_windows)}")

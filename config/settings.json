@@ -1,7 +1,9 @@
 {
   "calendar": {
-    "day_start_hour": 6,
-    "day_end_hour": 19,
+    "day_start_hour": 7,
+    "day_start_minute": 30,
+    "day_end_hour": 17,
+    "day_end_minute": 30,
     "back_to_back_gap_minutes": 15,
     "deep_work_min_minutes": 60
   },

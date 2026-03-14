@@ -57,13 +57,27 @@ tomorrow: $TOMORROW
 (Created at end of day — no morning briefing generated)
 NOTEOF
 else
-  python3 - <<PYEOF
-import re, sys
+  # Write answers to a temp JSON file to safely handle quotes and special characters
+  ANSWERS_FILE=$(mktemp /tmp/ritual-answers.XXXXXX.json)
+  python3 -c "
+import json, sys
+data = {'day_word': sys.argv[1], 'win': sys.argv[2], 'tomorrow': sys.argv[3], 'today': sys.argv[4]}
+open(sys.argv[5], 'w').write(json.dumps(data))
+" "$DAY_WORD" "$WIN" "$TOMORROW" "$TODAY" "$ANSWERS_FILE"
 
-note_path = "$NOTE_FILE"
-day_word = """$DAY_WORD"""
-win = """$WIN"""
-tomorrow = """$TOMORROW"""
+  python3 - "$NOTE_FILE" "$ANSWERS_FILE" << 'PYEOF'
+import re, sys, json
+
+note_path = sys.argv[1]
+answers_file = sys.argv[2]
+
+with open(answers_file) as f:
+    a = json.load(f)
+
+day_word = a["day_word"]
+win = a["win"]
+tomorrow = a["tomorrow"]
+today = a["today"]
 
 with open(note_path, "r") as f:
     content = f.read()
@@ -72,7 +86,7 @@ fm_pattern = re.compile(r"^(---\n)(.*?)(---\n)", re.DOTALL)
 match = fm_pattern.match(content)
 
 if not match:
-    new_fm = f"---\ndate: $TODAY\nday_word: {day_word}\nwin: {win}\ntomorrow: {tomorrow}\n---\n"
+    new_fm = f"---\ndate: {today}\nday_word: {day_word}\nwin: {win}\ntomorrow: {tomorrow}\n---\n"
     content = new_fm + content
 else:
     fm_body = match.group(2)
@@ -86,6 +100,8 @@ with open(note_path, "w") as f:
 
 print("ok")
 PYEOF
+
+  rm -f "$ANSWERS_FILE"
 fi
 
 # ── 3. 1:1 notes (if applicable) ──────────────────────────────────────────────

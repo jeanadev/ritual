@@ -173,27 +173,37 @@ $CARRY_FORWARD
 ### 1:1 notes from last meeting
 ${ONEONE_BLOCK:-"(no 1:1s today)"}"
 
-# ── 6. Call Anthropic API ──────────────────────────────────────────────────────
+
+# ── 6. Call Anthropic API ──────────────────────────────────────────────
 
 echo "${DIM}Generating briefing...${RESET}"
 
-# Build JSON payload using Python (avoids jq dependency, handles escaping safely)
-PAYLOAD=$(python3 - <<PYEOF
+# Write prompt to temp file to safely handle quotes in brain dump / calendar / GitHub
+PROMPT_FILE=$(mktemp /tmp/ritual-prompt.XXXXXX.json)
+python3 -c "
+import json, sys
+data = {'system': sys.argv[1], 'user': sys.argv[2]}
+open(sys.argv[3], 'w').write(json.dumps(data))
+" "$SYSTEM_PROMPT" "$USER_CONTENT" "$PROMPT_FILE"
+
+PAYLOAD=$(python3 - "$PROMPT_FILE" << 'PYEOF'
 import json, sys
 
-system = """$SYSTEM_PROMPT"""
-user = """$USER_CONTENT"""
+with open(sys.argv[1]) as f:
+    data = json.load(f)
 
 payload = {
     "model": "claude-sonnet-4-20250514",
     "max_tokens": 1024,
-    "system": system,
-    "messages": [{"role": "user", "content": user}]
+    "system": data["system"],
+    "messages": [{"role": "user", "content": data["user"]}]
 }
 
 print(json.dumps(payload))
 PYEOF
 )
+
+rm -f "$PROMPT_FILE"
 
 RESPONSE_FILE=$(mktemp /tmp/ritual-response.XXXXXX.json)
 

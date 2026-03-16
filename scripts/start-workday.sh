@@ -146,7 +146,7 @@ One bullet per event, format: - TIME–TIME — Event title. Each event on its o
 Derive from: GitHub priority + calendar breathing room + anything surfaced in the brain dump that isn't already captured. Number them. Include issue/PR number and title where applicable.
 
 ## Risk Flags
-Surface: back-to-back meetings, overloaded day, unresolved blockers, review queue pressure, or tension between what's scheduled and what's actually on the person's mind.
+One bullet per risk, format: - **Short label**: Explanation. Each risk on its own line. Surface: back-to-back meetings, overloaded day, unresolved blockers, review queue pressure, or tension between what's scheduled and what's actually on the person's mind.
 
 ## Carry-Forward
 If a carry-forward note is provided and it's not '(none)', quote it verbatim and include the source date. If none, omit this section entirely.

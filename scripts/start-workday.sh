@@ -48,7 +48,14 @@ import sys
 from pathlib import Path
 
 settings_path = Path(sys.argv[1])
-settings = json.loads(settings_path.read_text()) if settings_path.exists() else {}
+if settings_path.exists():
+    try:
+        settings = json.loads(settings_path.read_text())
+    except json.JSONDecodeError as e:
+        print(f"ERROR: config/settings.json is malformed: {e}\nFix or delete it and re-run ./scripts/configure-provider.sh", file=sys.stderr)
+        sys.exit(1)
+else:
+    settings = {}
 briefing = settings.get("briefing", {})
 
 provider = str(briefing.get("provider", "claude")).strip().lower() or "claude"
@@ -108,20 +115,26 @@ fi
 
 # ── 2. Fetch calendar ──────────────────────────────────────────────────────────
 
+CAL_ERR_FILE=$(mktemp /tmp/ritual-cal-err.XXXXXX.txt)
+CLEANUP_FILES+=("$CAL_ERR_FILE")
+
 echo ""
 echo "${DIM}Fetching calendar...${RESET}"
-CALENDAR_BLOCK=$(python3 "$SCRIPTS_DIR/fetch-calendar.py" 2>/tmp/ritual-cal-err.txt) || {
+CALENDAR_BLOCK=$(python3 "$SCRIPTS_DIR/fetch-calendar.py" 2>"$CAL_ERR_FILE") || {
   echo "${YELLOW}⚠️  Calendar fetch failed. Continuing without it.${RESET}"
-  echo "Error: $(cat /tmp/ritual-cal-err.txt)"
+  echo "Error: $(cat "$CAL_ERR_FILE")"
   CALENDAR_BLOCK="(calendar unavailable — fetch failed)"
 }
 
 # ── 3. Fetch GitHub ────────────────────────────────────────────────────────────
 
+GH_ERR_FILE=$(mktemp /tmp/ritual-gh-err.XXXXXX.txt)
+CLEANUP_FILES+=("$GH_ERR_FILE")
+
 echo "${DIM}Fetching GitHub...${RESET}"
-GITHUB_BLOCK=$(python3 "$SCRIPTS_DIR/fetch-github.py" 2>/tmp/ritual-gh-err.txt) || {
+GITHUB_BLOCK=$(python3 "$SCRIPTS_DIR/fetch-github.py" 2>"$GH_ERR_FILE") || {
   echo "${YELLOW}⚠️  GitHub fetch failed. Continuing without it.${RESET}"
-  echo "Error: $(cat /tmp/ritual-gh-err.txt)"
+  echo "Error: $(cat "$GH_ERR_FILE")"
   GITHUB_BLOCK="(GitHub unavailable — fetch failed)"
 }
 
@@ -139,7 +152,7 @@ for DAYS_BACK in 1 2 3 4; do
   if [[ -f "$PAST_NOTE" ]]; then
     TOMORROW_VALUE=$(python3 - "$PAST_NOTE" <<'PYEOF'
 import re, sys
-content = open(sys.argv[1]).read()
+content = open(sys.argv[1], encoding="utf-8-sig").read().replace("\r\n", "\n").lstrip("\n")
 match = re.match(r"^---\n(.*?)\n---\n", content, re.DOTALL)
 if match:
     for line in match.group(1).splitlines():
@@ -323,7 +336,7 @@ PYEOF
     --disable-builtin-mcps \
     --no-custom-instructions \
     --no-ask-user \
-    --allow-all-tools \
+    --available-tools= \
     -s \
     -p "$(cat "$COPILOT_PROMPT_FILE")" \
     2>"$COPILOT_ERR_FILE") || {

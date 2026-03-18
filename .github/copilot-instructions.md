@@ -16,7 +16,7 @@ This repo does not define a formal build, lint, or automated test suite. Validat
 
 pip3 install google-auth-oauthlib google-auth-httplib2 google-api-python-client python-dotenv requests
 cp config/.env.example config/.env
-chmod +x scripts/start-workday.sh scripts/end-workday.sh
+chmod +x scripts/*.sh
 ```
 
 ```bash
@@ -54,7 +54,7 @@ This repository is a local, file-based workday ritual rather than a packaged app
 - 1:1 names and meeting titles belong in `config/oneone-map.zsh`, which is local-only and gitignored. Do not hardcode personal names in the committed shell scripts.
 - `scripts/end-workday.sh` is the evening orchestrator. It collects three reflection answers, writes or updates YAML frontmatter in today’s note, re-fetches raw calendar output to detect 1:1 meetings, and appends carry-forward notes to `notes/1on1/<name>.md`.
 - `scripts/fetch-calendar.py` owns Google Calendar OAuth plus schedule analysis. It reads calendar thresholds from `config/settings.json`, excludes all-day events, flags back-to-back meetings, and emits deep-work windows as plain text for the shell scripts to consume.
-- `scripts/fetch-github.py` owns GitHub data collection. It uses REST search for open assigned issues and review-requested PRs, then makes a per-PR `requested_reviewers` call so the PR queue only keeps direct reviewer requests plus the designated a11y team slug.
+- `scripts/fetch-github.py` owns GitHub data collection. It uses REST search for open assigned issues and review-requested PRs, then makes a per-PR `requested_reviewers` call so the PR queue only keeps direct reviewer requests plus requests to the team defined by `GITHUB_TEAM` in `config/.env` (optional — if unset, only direct requests are kept).
 
 The persistent data model is plain markdown under `notes/`. Daily notes contain YAML frontmatter plus the generated briefing. Per-person 1:1 carry-forward notes live under `notes/1on1/`.
 
@@ -63,7 +63,7 @@ The persistent data model is plain markdown under `notes/`. Daily notes contain 
 - Keep scripts runnable from any working directory. Existing scripts resolve paths from `${0:A:h}` in zsh and `Path(__file__).parent` in Python instead of assuming the current directory.
 - Preserve the daily note frontmatter shape exactly: `date`, `day_word`, `win`, and `tomorrow`. `start-workday.sh` seeds blank values; `end-workday.sh` updates those keys in place.
 - Treat the brain dump as ephemeral input. The workflow intentionally passes it to the model but does not save it separately outside the generated briefing.
-- Keep `ONEONE_MAP` in `start-workday.sh` and `end-workday.sh` in sync. 1:1 detection is based on exact calendar title matches, not fuzzy matching.
+- `ONEONE_MAP` is sourced from `config/oneone-map.zsh` in both `start-workday.sh` and `end-workday.sh`. Do not duplicate or hardcode it in the scripts. 1:1 detection is based on exact calendar title matches, not fuzzy matching.
 - Preserve the split between model-generated briefing text and raw PR data. The `## PR Review Queue` section is appended verbatim from `fetch-github.py` so links are not lost to summarization.
 - When passing rich text or API responses through shell, follow the existing temp-file pattern instead of embedding multiline JSON directly in shell variables. Both shell scripts rely on Python helpers plus `mktemp` to avoid quote/newline breakage.
 - `fetch-calendar.py` and `fetch-github.py` are consumed by shell via stdout, so avoid adding non-data prints to stdout. If warnings are unavoidable, send them to stderr.

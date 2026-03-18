@@ -79,7 +79,11 @@ provider = sys.argv[2]
 
 settings = {}
 if settings_path.exists():
-    settings = json.loads(settings_path.read_text())
+    try:
+        settings = json.loads(settings_path.read_text())
+    except json.JSONDecodeError as e:
+        print(f"ERROR: config/settings.json is malformed: {e}\nDelete it and re-run this script to recreate it.", file=sys.stderr)
+        sys.exit(1)
 
 briefing = settings.setdefault("briefing", {})
 briefing["provider"] = provider

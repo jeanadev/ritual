@@ -35,7 +35,14 @@ SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 
 # Load settings
 SETTINGS_FILE = CONFIG_DIR / "settings.json"
-_settings = json.loads(SETTINGS_FILE.read_text()) if SETTINGS_FILE.exists() else {}
+if SETTINGS_FILE.exists():
+    try:
+        _settings = json.loads(SETTINGS_FILE.read_text())
+    except json.JSONDecodeError as e:
+        print(f"ERROR: config/settings.json is malformed: {e}\nFix or delete it and re-run ./scripts/configure-provider.sh", file=sys.stderr)
+        sys.exit(1)
+else:
+    _settings = {}
 _cal = _settings.get("calendar", {})
 
 DAY_START_HOUR = _cal.get("day_start_hour", 7)

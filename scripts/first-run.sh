@@ -110,7 +110,11 @@ if [[ "$CHECK_ONLY" == "1" ]]; then
     PROVIDER_STATE=$(python3 - "$CONFIG_DIR/settings.json" <<'PYEOF'
 import json, sys
 from pathlib import Path
-settings = json.loads(Path(sys.argv[1]).read_text())
+try:
+    settings = json.loads(Path(sys.argv[1]).read_text())
+except json.JSONDecodeError as e:
+    print(f"ERROR: malformed ({e})")
+    sys.exit(0)
 print(settings.get("briefing", {}).get("provider", "(unset)"))
 PYEOF
 )

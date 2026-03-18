@@ -269,7 +269,7 @@ notes/
 
 **Copilot briefing fails:** Run `gh copilot` once manually and complete login. Confirm you have an active Copilot subscription and that `config/settings.json` has `"provider": "copilot"`.
 
-**GitHub PR list includes unwanted team-tagged PRs:** Update the team slug in `fetch-github.py` to match your team exactly.
+**GitHub PR list includes unwanted team-tagged PRs:** Set `GITHUB_TEAM=your-team-slug` in `config/.env` to match your team exactly. If `GITHUB_TEAM` is not set, only direct review requests (where you are tagged individually) are included.
 
 **1:1 prompts not appearing:** The calendar event title must exactly match a key in `config/oneone-map.zsh`. Match is case-sensitive.
 

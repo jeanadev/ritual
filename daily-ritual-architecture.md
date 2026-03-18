@@ -2,7 +2,7 @@
 
 **Status:** v1.0 — Built and running  
 **Owner:** Design Lead / Accessibility Specialist  
-**Stack:** zsh + Python + Anthropic API + Google Calendar API + GitHub REST API  
+**Stack:** zsh + Python + Anthropic API or GitHub Copilot CLI + Google Calendar API + GitHub REST API  
 **Goal:** Bookend workday with AI-assisted planning (morning) and structured reflection (evening)
 
 ---
@@ -12,11 +12,11 @@
 Two shell commands that together form a daily ritual:
 
 ```
-start-workday  →  brain dump + calendar + GitHub → Claude → daily note (opens in VS Code)
+start-workday  →  brain dump + calendar + GitHub → Claude or Copilot → daily note (opens in VS Code)
 end-workday    →  3 questions → frontmatter → carry-forward + 1:1 notes
 ```
 
-All data lives as plain markdown files you own and control. No third-party app. No subscription. No dashboard.
+All data lives as plain markdown files you own and control. No third-party note app. No dashboard. The LLM provider is swappable between Claude and GitHub Copilot.
 
 ---
 
@@ -29,8 +29,10 @@ All data lives as plain markdown files you own and control. No third-party app. 
 │  Google Calendar API ──┐                                    │
 │                        │                                    │
 │  GitHub REST API ───────┼──► start-workday.sh ──► Claude API │
-│                        │                              │     │
-│  Brain dump (typed) ───┘                         response   │
+│                        │                           or        │
+│  Brain dump (typed) ───┘                      GitHub Copilot │
+│                                                       │     │
+│                                                   response   │
 │  "What's on your mind?"                               │     │
 │                                               daily-note.md │
 │                                               (opens in     │
@@ -88,7 +90,7 @@ All data lives as plain markdown files you own and control. No third-party app. 
 - **What it is:** Free-text prompt at the start of `start-workday` — "What's on your mind?"
 - **Input method:** Type freely, hit return twice when done
 - **Storage:** Ephemeral by design — not saved verbatim. The writing does its job (processing, decompressing) and the signal survives into the briefing output
-- **Claude's job:** Cross-reference against calendar and GitHub to surface gaps — things on your mind that aren't on your schedule, or schedule pressure that conflicts with what you're actually worried about
+- **Briefing model's job:** Cross-reference against calendar and GitHub to surface gaps — things on your mind that aren't on your schedule, or schedule pressure that conflicts with what you're actually worried about
 
 ### Google Calendar
 - **Auth:** OAuth 2.0 via Google Cloud Console (one-time setup)
@@ -108,13 +110,22 @@ All data lives as plain markdown files you own and control. No third-party app. 
 
 **PR filtering detail:** GitHub's search API resolves team membership, so `review-requested:username` returns PRs tagged via any team the user belongs to. The script makes a secondary call to `/pulls/{number}/requested_reviewers` for each result and keeps only PRs where the username appears directly in `users` OR the designated a11y team slug appears in `teams`. This filters out broad org-team noise while keeping both direct and a11y-team requests.
 
-### Anthropic API
-- **Model:** `claude-sonnet-4-20250514`
-- **Call type:** Single `/v1/messages` POST per morning
-- **Input:** System prompt + calendar block + GitHub block + brain dump + yesterday's "tomorrow" note + any 1:1 carry-forwards
+### Briefing provider
+- **Selection:** `config/settings.json` → `briefing.provider`
+- **Shared input:** System prompt + calendar block + GitHub block + brain dump + yesterday's "tomorrow" note + any 1:1 carry-forwards
 - **Output:** Plain markdown briefing, max 400 words
 
-**Implementation note:** The API response contains newlines that break shell heredoc JSON parsing. Fix: write the API response to a temp file (`mktemp`) and parse it with Python reading from the file rather than interpolating the response into a shell variable.
+#### Claude
+- **Model:** Configurable via `briefing.anthropic_model` (default `claude-sonnet-4-20250514`)
+- **Call type:** Single `/v1/messages` POST per morning
+- **Auth:** `ANTHROPIC_API_KEY` in `config/.env`
+
+#### GitHub Copilot CLI
+- **Model:** Configurable via `briefing.copilot_model` (default `gpt-5.4`)
+- **Call type:** Single non-interactive `gh copilot -p ... -s` run per morning
+- **Auth:** Copilot CLI login plus active Copilot entitlement
+
+**Implementation note:** Both provider paths use temp files (`mktemp`) when moving multiline prompt/response content through shell. This avoids newline and quoting failures from interpolating rich text directly into shell command strings.
 
 ---
 
@@ -156,9 +167,9 @@ explicitly. If something is scheduled but the brain dump suggests it's not
 the real priority, name the tension. Tone: direct, no filler.
 ```
 
-### PR list — not summarized by Claude
+### PR list — not summarized by the briefing model
 
-Claude's 400-word limit causes it to summarize and drop PR URLs. The PR review queue is appended to the daily note verbatim, after Claude's briefing, so links are always preserved. This is a separate `## PR Review Queue` section at the bottom of the note — raw output from `fetch-github.py`, not touched by the model.
+The 400-word briefing limit encourages summarization and can drop PR URLs. The PR review queue is appended to the daily note verbatim, after the model-generated briefing, so links are always preserved. This is a separate `## PR Review Queue` section at the bottom of the note — raw output from `fetch-github.py`, not touched by the model.
 
 ### Evening prompts
 
@@ -178,25 +189,25 @@ Everything else from the day — paper notes, scribbles, thinking-out-loud — s
 
 ## 1:1 Carry-Forward Loop
 
-At end of day, `end-workday` re-fetches the raw calendar (not Claude's summary — Claude reformats meeting names) and checks for exact title matches against a hardcoded map of known 1:1 meetings. If a match is found, it prompts for carry-forward notes per person.
+At end of day, `end-workday` re-fetches the raw calendar (not the model summary — the briefing reformats meeting names) and checks for exact title matches against a local 1:1 map in `config/oneone-map.zsh`. If a match is found, it prompts for carry-forward notes per person.
 
 Notes are saved to `notes/1on1/[name].md` with a date header.
 
 On the morning of the next 1:1, `start-workday` detects the meeting in the raw calendar output and injects the last entry from that person's file into the briefing under **1:1 Prep**.
 
-**Why hardcoded titles instead of pattern matching:** Calendar event names like `Name / Name` are common defaults in Google Calendar and would generate false positives. Exact string matching against known titles is more reliable and easier to maintain.
+**Why exact titles instead of pattern matching:** Calendar event names like `Name / Name` are common defaults in Google Calendar and would generate false positives. Exact string matching against a local config map is more reliable and easier to maintain.
 
-**Why re-fetch calendar at end of day:** Claude summarizes and reformats meeting names in the briefing. Scanning the daily note for meeting names would miss matches. The raw calendar output always contains exact titles.
+**Why re-fetch calendar at end of day:** The briefing reformats meeting names. Scanning the daily note for meeting names would miss matches. The raw calendar output always contains exact titles.
 
 ---
 
 ## Design Decisions & Rationale
 
 ### GitHub REST over Projects v2 GraphQL
-The original architecture assumed GraphQL against GitHub Projects v2 for richer iteration/status context. In practice, the org has thousands of issues and paginating the entire project timed out at any page size. REST search (`/search/issues`) is indexed by GitHub, returns in seconds, and gives sufficient signal for a daily briefing. The loss of iteration/status filtering is acceptable — Claude synthesizes down to top 3 regardless.
+The original architecture assumed GraphQL against GitHub Projects v2 for richer iteration/status context. In practice, the org has thousands of issues and paginating the entire project timed out at any page size. REST search (`/search/issues`) is indexed by GitHub, returns in seconds, and gives sufficient signal for a daily briefing. The loss of iteration/status filtering is acceptable — the briefing model synthesizes down to top 3 regardless.
 
 ### Brain dump as a first-class input
-Calendar and GitHub data only reflect what's scheduled — not what's actually weighing on you. The gap between those two things is often where the day's real friction lives. Adding the brain dump as a third input lets Claude surface tensions that neither data source would catch alone.
+Calendar and GitHub data only reflect what's scheduled — not what's actually weighing on you. The gap between those two things is often where the day's real friction lives. Adding the brain dump as a third input lets the briefing model surface tensions that neither data source would catch alone.
 
 ### Ephemeral brain dump
 The dump is not stored verbatim. This is intentional. The writing does its job (processing, decompressing) and the signal survives into the briefing. Storing it would add retrieval pressure and change the nature of the writing.
@@ -220,9 +231,9 @@ The ritual repo lives on a personal GitHub account separate from the work accoun
 | Original plan | What actually shipped |
 |---|---|
 | GitHub Projects v2 GraphQL | GitHub REST search — faster, simpler |
-| Filter to active iteration + status | All open assigned issues — Claude synthesizes |
+| Filter to active iteration + status | All open assigned issues — model synthesizes |
 | Phase 1 manual validation first | Built everything day one, ran in parallel |
-| PR list summarized by Claude | PR list appended verbatim to preserve URLs |
+| PR list summarized by model | PR list appended verbatim to preserve URLs |
 | No 1:1 support | 1:1 carry-forward loop added same day |
 
 ---
@@ -234,7 +245,7 @@ The ritual repo lives on a personal GitHub account separate from the work accoun
 - **GraphQL timeout** — thousands of issues in the org made project pagination unworkable; rewrote to use REST search
 - **Shell heredoc JSON parsing** — API response newlines break `json.loads("""$RESPONSE""")` in shell heredocs; fixed by writing response to temp file
 - **PR filter noise** — GitHub search resolves team membership, returning more PRs than desired; added per-PR reviewer verification
-- **1:1 detection from daily note** — Claude reformats meeting names, breaking pattern matching; fixed by re-fetching raw calendar at end of day
+- **1:1 detection from daily note** — the briefing reformats meeting names, breaking pattern matching; fixed by re-fetching raw calendar at end of day
 - **Google API warnings to stdout** — third-party library warnings polluted calendar output and broke grep-based detection; suppressed with `2>/dev/null` in shell calls
 
 ---
@@ -250,7 +261,7 @@ Completed in parallel with Phase 2. Prompt template built and usable standalone 
 - [x] `fetch-calendar.py` — live calendar with back-to-back and deep work detection
 - [x] GitHub fine-grained token with Issues + Pull requests read
 - [x] `fetch-github.py` — assigned issues + scoped PR queue via REST
-- [x] `start-workday.sh` — full pipeline, Anthropic API call, opens in VS Code
+- [x] `start-workday.sh` — full pipeline, provider call, opens in VS Code
 
 ### Phase 3 — Scripted evening ✓
 - [x] `end-workday.sh` — 3 questions, YAML frontmatter

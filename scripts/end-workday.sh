@@ -12,7 +12,10 @@ SCRIPT_DIR="${0:A:h}"
 ROOT_DIR="${SCRIPT_DIR:h}"
 NOTES_DIR="$ROOT_DIR/notes"
 ONEONE_DIR="$ROOT_DIR/notes/1on1"
+CONFIG_DIR="$ROOT_DIR/config"
+ONEONE_MAP_FILE="$CONFIG_DIR/oneone-map.zsh"
 
+LOCAL_TIMEZONE=$(date +%Z)
 TODAY=$(date +%Y-%m-%d)
 NOTE_FILE="$NOTES_DIR/$TODAY.md"
 
@@ -22,7 +25,7 @@ DIM='\033[2m'
 GREEN='\033[0;32m'
 
 echo ""
-echo "${BOLD}— end workday — $TODAY —${RESET}"
+echo "${BOLD}— end workday — $TODAY ($LOCAL_TIMEZONE) —${RESET}"
 echo ""
 
 # ── 1. Three questions ─────────────────────────────────────────────────────────
@@ -106,16 +109,11 @@ fi
 
 # ── 3. 1:1 notes (if applicable) ──────────────────────────────────────────────
 
-# Exact calendar title → person name mapping
-# Update if meeting names change
-declare -A ONEONE_MAP=(
-  ["Raquel / Jeana"]="Raquel"
-  ["Dan / Jeana"]="Dan"
-  ["Jamie / Jeana"]="Jamie"
-  ["David / Jeana"]="David"
-  ["Erin / Jeana"]="Erin"
-  ["Barb / Jeana"]="Barb"
-)
+# Exact calendar title → person name mapping from local config
+declare -A ONEONE_MAP=()
+if [[ -f "$ONEONE_MAP_FILE" ]]; then
+  source "$ONEONE_MAP_FILE"
+fi
 
 # Re-fetch today's raw calendar (stderr suppressed — warnings only)
 RAW_CALENDAR=$(python3 "$SCRIPT_DIR/fetch-calendar.py" 2>/dev/null || echo "")

@@ -43,6 +43,17 @@ DAY_END_HOUR = _cal.get("day_end_hour", 17)
 DAY_END_MINUTE = _cal.get("day_end_minute", 30)
 BACK_TO_BACK_GAP = _cal.get("back_to_back_gap_minutes", 15)
 DEEP_WORK_MIN = _cal.get("deep_work_min_minutes", 60)
+LOCAL_TIMEZONE = datetime.datetime.now().astimezone().tzinfo
+
+
+def local_now():
+    return datetime.datetime.now(LOCAL_TIMEZONE)
+
+
+def local_datetime(day, hour, minute):
+    return datetime.datetime.combine(
+        day, datetime.time(hour, minute), tzinfo=LOCAL_TIMEZONE
+    )
 
 
 def get_credentials():
@@ -112,8 +123,8 @@ def detect_back_to_back(events, gap_minutes=15):
 def get_deep_work_windows(events, start_hour=6, end_hour=19, min_gap_minutes=60):
     """Find unscheduled blocks >= min_gap_minutes."""
     windows = []
-    day = datetime.date.today()
-    cursor = datetime.datetime.combine(day, datetime.time(DAY_START_HOUR, DAY_START_MINUTE)).astimezone()
+    day = local_now().date()
+    cursor = local_datetime(day, start_hour, DAY_START_MINUTE)
 
     for event in events:
         gap = event["start"] - cursor
@@ -123,7 +134,7 @@ def get_deep_work_windows(events, start_hour=6, end_hour=19, min_gap_minutes=60)
             )
         cursor = max(cursor, event["end"])
 
-    end_of_day = datetime.datetime.combine(day, datetime.time(DAY_END_HOUR, DAY_END_MINUTE)).astimezone()
+    end_of_day = local_datetime(day, end_hour, DAY_END_MINUTE)
     gap = end_of_day - cursor
     if gap.total_seconds() / 60 >= min_gap_minutes:
         windows.append(
@@ -147,13 +158,9 @@ def main():
     creds = get_credentials()
     service = build("calendar", "v3", credentials=creds)
 
-    today = datetime.date.today()
-    time_min = datetime.datetime.combine(
-        today, datetime.time(DAY_START_HOUR, DAY_START_MINUTE)
-    ).astimezone().isoformat()
-    time_max = datetime.datetime.combine(
-        today, datetime.time(DAY_END_HOUR, DAY_END_MINUTE)
-    ).astimezone().isoformat()
+    today = local_now().date()
+    time_min = local_datetime(today, DAY_START_HOUR, DAY_START_MINUTE).isoformat()
+    time_max = local_datetime(today, DAY_END_HOUR, DAY_END_MINUTE).isoformat()
 
     result = (
         service.events()

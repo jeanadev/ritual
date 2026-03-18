@@ -1,0 +1,9 @@
+#!/usr/bin/env zsh
+
+# Copy this file to config/oneone-map.zsh and customize it locally.
+# Keys should match the exact Google Calendar event titles used for your 1:1s.
+# Values are the short names used in prompts and note filenames.
+
+declare -gA ONEONE_MAP=(
+  ["Person / YourName"]="Person"
+)

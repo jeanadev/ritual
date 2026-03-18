@@ -1,7 +1,7 @@
 #!/usr/bin/env zsh
 # start-workday.sh
 # Morning entry point. Collects brain dump, fetches calendar + GitHub,
-# calls Anthropic API, writes today's daily note.
+# generates a briefing via the configured provider, writes today's daily note.
 #
 # Usage: ./start-workday.sh
 # Or from anywhere if added to PATH or aliased.
@@ -14,6 +14,19 @@ CONFIG_DIR="$ROOT_DIR/config"
 NOTES_DIR="$ROOT_DIR/notes"
 SCRIPTS_DIR="$ROOT_DIR/scripts"
 
+LOCAL_TIMEZONE=$(date +%Z)
+TODAY=$(date +%Y-%m-%d)
+
+get_past_date() {
+  local days_back="$1"
+
+  if date -d "${days_back} days ago" +%Y-%m-%d >/dev/null 2>&1; then
+    date -d "${days_back} days ago" +%Y-%m-%d
+  else
+    date -v-"${days_back}"d +%Y-%m-%d
+  fi
+}
+
 # Load env
 if [[ -f "$CONFIG_DIR/.env" ]]; then
   set -a
@@ -24,11 +37,41 @@ else
   exit 1
 fi
 
-: "${ANTHROPIC_API_KEY:?ERROR: ANTHROPIC_API_KEY not set in config/.env}"
-
-TODAY=$(date +%Y-%m-%d)
 NOTE_FILE="$NOTES_DIR/$TODAY.md"
 SETTINGS_FILE="$CONFIG_DIR/settings.json"
+
+# Load briefing settings
+read -r BRIEFING_PROVIDER ANTHROPIC_MODEL COPILOT_MODEL BRIEFING_MAX_TOKENS <<EOF
+$(python3 - "$SETTINGS_FILE" <<'PYEOF'
+import json
+import sys
+from pathlib import Path
+
+settings_path = Path(sys.argv[1])
+settings = json.loads(settings_path.read_text()) if settings_path.exists() else {}
+briefing = settings.get("briefing", {})
+
+provider = str(briefing.get("provider", "claude")).strip().lower() or "claude"
+anthropic_model = str(briefing.get("anthropic_model", "claude-sonnet-4-20250514")).strip()
+copilot_model = str(briefing.get("copilot_model", "gpt-5.4")).strip()
+max_tokens = int(briefing.get("max_tokens", 1024))
+
+print(provider, anthropic_model, copilot_model, max_tokens)
+PYEOF
+)
+EOF
+
+case "$BRIEFING_PROVIDER" in
+  claude|copilot) ;;
+  *)
+    echo "ERROR: briefing.provider must be 'claude' or 'copilot' in config/settings.json." >&2
+    exit 1
+    ;;
+esac
+
+if [[ "$BRIEFING_PROVIDER" == "claude" ]]; then
+  : "${ANTHROPIC_API_KEY:?ERROR: ANTHROPIC_API_KEY not set in config/.env}"
+fi
 
 # Colors (safe for terminals that support them)
 BOLD='\033[1m'
@@ -40,7 +83,7 @@ YELLOW='\033[1;33m'
 mkdir -p "$NOTES_DIR"
 
 echo ""
-echo "${BOLD}— start workday — $TODAY —${RESET}"
+echo "${BOLD}— start workday — $TODAY ($LOCAL_TIMEZONE) —${RESET}"
 echo ""
 
 # ── 1. Brain dump ──────────────────────────────────────────────────────────────
@@ -88,7 +131,7 @@ PR_BLOCK=$(echo "$GITHUB_BLOCK" | awk '/^### PRs/,0')
 CARRY_FORWARD=""
 
 for DAYS_BACK in 1 2 3 4; do
-  PAST_DATE=$(date -v-${DAYS_BACK}d +%Y-%m-%d 2>/dev/null || date -d "${DAYS_BACK} days ago" +%Y-%m-%d)
+  PAST_DATE=$(get_past_date "$DAYS_BACK")
   PAST_NOTE="$NOTES_DIR/$PAST_DATE.md"
   if [[ -f "$PAST_NOTE" ]]; then
     TOMORROW_VALUE=$(awk '/^---/{f++} f==1 && /^tomorrow:/{sub(/^tomorrow: */, ""); print; exit}' "$PAST_NOTE")
@@ -107,24 +150,24 @@ fi
 
 ONEONE_DIR="$NOTES_DIR/1on1"
 ONEONE_BLOCK=""
+ONEONE_MAP_FILE="$CONFIG_DIR/oneone-map.zsh"
 
-# Known 1:1 meetings — must match start-workday and end-workday
-declare -A ONEONE_MAP=(
-  ["Raquel / Jeana"]="Raquel"
-  ["Dan / Jeana"]="Dan"
-  ["Jamie / Jeana"]="Jamie"
-  ["David / Jeana"]="David"
-  ["Erin / Jeana"]="Erin"
-  ["Barb / Jeana"]="Barb"
-)
+# Known 1:1 meetings come from local config and must match start-workday/end-workday.
+declare -A ONEONE_MAP=()
+if [[ -f "$ONEONE_MAP_FILE" ]]; then
+  source "$ONEONE_MAP_FILE"
+fi
 
 # Check raw calendar output for exact 1:1 title matches
 for TITLE in "${(@k)ONEONE_MAP}"; do
   NAME="${ONEONE_MAP[$TITLE]}"
   ONEONE_FILE="$ONEONE_DIR/${NAME:l}.md"
   if echo "$CALENDAR_BLOCK" | grep -qF "$TITLE" && [[ -f "$ONEONE_FILE" ]]; then
-    LAST_NOTE=$(awk '/^## /{found=1; header=$0; body=""} found && !/^## /{body=body"
-"$0} END{if(header) print header body}' "$ONEONE_FILE" | tail -20)
+    LAST_NOTE=$(awk '
+      /^## / {header=$0; body=""; next}
+      header {body = body $0 ORS}
+      END {if (header) printf "%s\n%s", header, body}
+    ' "$ONEONE_FILE" | tail -20)
     if [[ -n "$LAST_NOTE" ]]; then
       ONEONE_BLOCK+="### 1:1 with $NAME
 $LAST_NOTE
@@ -174,11 +217,10 @@ $CARRY_FORWARD
 ${ONEONE_BLOCK:-"(no 1:1s today)"}"
 
 
-# ── 6. Call Anthropic API ──────────────────────────────────────────────
+# ── 6. Generate briefing via selected provider ────────────────────────────────
 
-echo "${DIM}Generating briefing...${RESET}"
+echo "${DIM}Generating briefing with ${BRIEFING_PROVIDER}...${RESET}"
 
-# Write prompt to temp file to safely handle quotes in brain dump / calendar / GitHub
 PROMPT_FILE=$(mktemp /tmp/ritual-prompt.XXXXXX.json)
 python3 -c "
 import json, sys
@@ -186,36 +228,35 @@ data = {'system': sys.argv[1], 'user': sys.argv[2]}
 open(sys.argv[3], 'w').write(json.dumps(data))
 " "$SYSTEM_PROMPT" "$USER_CONTENT" "$PROMPT_FILE"
 
-PAYLOAD=$(python3 - "$PROMPT_FILE" << 'PYEOF'
+if [[ "$BRIEFING_PROVIDER" == "claude" ]]; then
+  PAYLOAD=$(python3 - "$PROMPT_FILE" "$ANTHROPIC_MODEL" "$BRIEFING_MAX_TOKENS" << 'PYEOF'
 import json, sys
 
 with open(sys.argv[1]) as f:
     data = json.load(f)
 
 payload = {
-    "model": "claude-sonnet-4-20250514",
-    "max_tokens": 1024,
+    "model": sys.argv[2],
+    "max_tokens": int(sys.argv[3]),
     "system": data["system"],
     "messages": [{"role": "user", "content": data["user"]}]
 }
 
 print(json.dumps(payload))
 PYEOF
-)
+  )
 
-rm -f "$PROMPT_FILE"
+  RESPONSE_FILE=$(mktemp /tmp/ritual-response.XXXXXX.json)
 
-RESPONSE_FILE=$(mktemp /tmp/ritual-response.XXXXXX.json)
+  curl -s -X POST "https://api.anthropic.com/v1/messages" \
+    -H "x-api-key: $ANTHROPIC_API_KEY" \
+    -H "anthropic-version: 2023-06-01" \
+    -H "content-type: application/json" \
+    -d "$PAYLOAD" \
+    -o "$RESPONSE_FILE"
 
-curl -s -X POST "https://api.anthropic.com/v1/messages" \
-  -H "x-api-key: $ANTHROPIC_API_KEY" \
-  -H "anthropic-version: 2023-06-01" \
-  -H "content-type: application/json" \
-  -d "$PAYLOAD" \
-  -o "$RESPONSE_FILE"
-
-# Extract text content from response
-BRIEFING=$(python3 - "$RESPONSE_FILE" <<'PYEOF'
+  # Extract text content from response
+  BRIEFING=$(python3 - "$RESPONSE_FILE" <<'PYEOF'
 import json, sys
 
 with open(sys.argv[1]) as f:
@@ -229,14 +270,59 @@ content = response.get("content", [])
 text = "\n\n".join(block["text"] for block in content if block.get("type") == "text")
 print(text)
 PYEOF
-) || {
-  echo "ERROR: Anthropic API call failed." >&2
-  cat "$RESPONSE_FILE" >&2
-  rm -f "$RESPONSE_FILE"
-  exit 1
-}
+  ) || {
+    echo "ERROR: Anthropic API call failed." >&2
+    cat "$RESPONSE_FILE" >&2
+    rm -f "$PROMPT_FILE" "$RESPONSE_FILE"
+    exit 1
+  }
 
-rm -f "$RESPONSE_FILE"
+  rm -f "$RESPONSE_FILE"
+else
+  if ! command -v gh >/dev/null 2>&1; then
+    echo "ERROR: gh CLI not found. Install GitHub CLI to use briefing.provider=copilot." >&2
+    rm -f "$PROMPT_FILE"
+    exit 1
+  fi
+
+  COPILOT_PROMPT_FILE=$(mktemp /tmp/ritual-copilot-prompt.XXXXXX.txt)
+  python3 - "$PROMPT_FILE" "$COPILOT_PROMPT_FILE" <<'PYEOF'
+import json, sys
+
+with open(sys.argv[1]) as f:
+    data = json.load(f)
+
+prompt = (
+    "You are generating a daily briefing for a local shell workflow.\n"
+    "Do not use tools, do not edit files, and do not explain your process.\n"
+    "Return only the final markdown briefing.\n\n"
+    f"SYSTEM:\n{data['system']}\n\nUSER:\n{data['user']}\n"
+)
+
+with open(sys.argv[2], "w") as f:
+    f.write(prompt)
+PYEOF
+
+  COPILOT_ERR_FILE=$(mktemp /tmp/ritual-copilot-err.XXXXXX.txt)
+  BRIEFING=$(env -u GITHUB_TOKEN -u GH_TOKEN -u COPILOT_GITHUB_TOKEN gh copilot \
+    --model "$COPILOT_MODEL" \
+    --disable-builtin-mcps \
+    --no-custom-instructions \
+    --no-ask-user \
+    --allow-all-tools \
+    -s \
+    -p "$(cat "$COPILOT_PROMPT_FILE")" \
+    2>"$COPILOT_ERR_FILE") || {
+      echo "ERROR: GitHub Copilot CLI call failed." >&2
+      cat "$COPILOT_ERR_FILE" >&2
+      rm -f "$PROMPT_FILE" "$COPILOT_PROMPT_FILE" "$COPILOT_ERR_FILE"
+      exit 1
+    }
+
+  rm -f "$COPILOT_PROMPT_FILE" "$COPILOT_ERR_FILE"
+fi
+
+rm -f "$PROMPT_FILE"
 
 # ── 7. Write daily note ────────────────────────────────────────────────────────
 

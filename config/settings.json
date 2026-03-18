@@ -14,7 +14,7 @@
     ]
   },
   "briefing": {
-    "provider": "automation",
+    "provider": "copilot",
     "anthropic_model": "claude-sonnet-4-20250514",
     "copilot_model": "gpt-5.4",
     "max_tokens": 1024

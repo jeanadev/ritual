@@ -164,7 +164,7 @@ if match:
 PYEOF
 )
     if [[ -n "$TOMORROW_VALUE" ]]; then
-      CARRY_FORWARD="\"$TOMORROW_VALUE\"\n— from $PAST_DATE"
+      CARRY_FORWARD="\"$TOMORROW_VALUE\""${'\n'}"— from $PAST_DATE"
       break
     fi
   fi
@@ -197,8 +197,9 @@ for TITLE in "${(@k)ONEONE_MAP}"; do
       END {if (header) printf "%s\n%s", header, body}
     ' "$ONEONE_FILE" | tail -20)
     if [[ -n "$LAST_NOTE" ]]; then
+      LAST_NOTE_DISPLAY="${LAST_NOTE/#\#\# /#### }"
       ONEONE_BLOCK+="### 1:1 with $NAME
-$LAST_NOTE
+$LAST_NOTE_DISPLAY
 "
     fi
   fi

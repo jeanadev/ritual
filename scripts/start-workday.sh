@@ -69,9 +69,9 @@ PYEOF
 EOF
 
 case "$BRIEFING_PROVIDER" in
-  claude|copilot) ;;
+  claude|copilot|automation) ;;
   *)
-    echo "ERROR: briefing.provider must be 'claude' or 'copilot' in config/settings.json." >&2
+    echo "ERROR: briefing.provider must be 'claude', 'copilot', or 'automation' in config/settings.json." >&2
     exit 1
     ;;
 esac
@@ -138,8 +138,10 @@ GITHUB_BLOCK=$(python3 "$SCRIPTS_DIR/fetch-github.py" 2>"$GH_ERR_FILE") || {
   GITHUB_BLOCK="(GitHub unavailable — fetch failed)"
 }
 
+# Split GitHub output so automation mode can avoid duplicating the PR queue.
+GITHUB_MAIN_BLOCK=$(print -r -- "$GITHUB_BLOCK" | awk 'BEGIN{in_prs=0} /^### PRs/{in_prs=1} !in_prs{print}')
 # Extract just the PR section for verbatim append to note
-PR_BLOCK=$(echo "$GITHUB_BLOCK" | awk '/^### PRs/,0')
+PR_BLOCK=$(print -r -- "$GITHUB_BLOCK" | awk '/^### PRs/,0')
 
 # ── 4. Carry-forward from last working day ───────────────────────────────────
 # Looks back up to 4 days to handle weekends and long weekends
@@ -162,7 +164,7 @@ if match:
 PYEOF
 )
     if [[ -n "$TOMORROW_VALUE" ]]; then
-      CARRY_FORWARD="\"$TOMORROW_VALUE\"\n— from $PAST_DATE"
+      CARRY_FORWARD="\"$TOMORROW_VALUE\""$'\n'"— from $PAST_DATE"
       break
     fi
   fi
@@ -195,8 +197,9 @@ for TITLE in "${(@k)ONEONE_MAP}"; do
       END {if (header) printf "%s\n%s", header, body}
     ' "$ONEONE_FILE" | tail -20)
     if [[ -n "$LAST_NOTE" ]]; then
+      LAST_NOTE_DISPLAY="${LAST_NOTE/#\#\# /#### }"
       ONEONE_BLOCK+="### 1:1 with $NAME
-$LAST_NOTE
+$LAST_NOTE_DISPLAY
 "
     fi
   fi
@@ -244,6 +247,49 @@ ${ONEONE_BLOCK:-"(no 1:1s today)"}"
 
 
 # ── 6. Generate briefing via selected provider ────────────────────────────────
+
+if [[ "$BRIEFING_PROVIDER" == "automation" ]]; then
+  echo "${DIM}Skipping AI briefing (provider=automation). Writing raw data to note.${RESET}"
+
+  CARRY_SECTION=""
+  if [[ "$CARRY_FORWARD" != "(none)" ]]; then
+    CARRY_SECTION="## Carry-Forward
+
+$CARRY_FORWARD"
+  fi
+
+  ONEONE_SECTION=""
+  if [[ -n "$ONEONE_BLOCK" ]]; then
+    ONEONE_SECTION="## 1:1 Prep
+
+$ONEONE_BLOCK"
+  fi
+
+  BRIEFING="## Brain Dump
+
+$BRAIN_DUMP
+
+## Schedule
+
+$CALENDAR_BLOCK
+
+## GitHub
+
+$GITHUB_MAIN_BLOCK"
+
+  if [[ -n "$CARRY_SECTION" ]]; then
+    BRIEFING="$BRIEFING
+
+$CARRY_SECTION"
+  fi
+
+  if [[ -n "$ONEONE_SECTION" ]]; then
+    BRIEFING="$BRIEFING
+
+$ONEONE_SECTION"
+  fi
+
+else
 
 echo "${DIM}Generating briefing with ${BRIEFING_PROVIDER}...${RESET}"
 
@@ -346,6 +392,8 @@ PYEOF
     }
 
 fi
+
+fi # end provider block
 
 # ── 7. Write daily note ────────────────────────────────────────────────────────
 

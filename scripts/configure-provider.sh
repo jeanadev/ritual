@@ -23,9 +23,10 @@ YELLOW='\033[1;33m'
 
 usage() {
   cat <<'EOF'
-Usage: scripts/configure-provider.sh [claude|copilot]
+Usage: scripts/configure-provider.sh [claude|copilot|automation]
 
 If no argument is provided, the script will prompt you to choose a provider.
+Use "automation" to run automation only (no AI briefing).
 EOF
 }
 
@@ -36,15 +37,17 @@ pick_provider() {
   echo "${BOLD}Choose your morning briefing provider:${RESET}"
   echo "  1) Claude"
   echo "  2) Copilot"
+  echo "  3) Automation (no AI briefing)"
   echo ""
-  printf "Enter 1 or 2: "
+  printf "Enter 1, 2, or 3: "
   read -r choice
 
   case "$choice" in
     1) echo "claude" ;;
     2) echo "copilot" ;;
+    3) echo "automation" ;;
     *)
-      echo "ERROR: Please enter 1 or 2." >&2
+      echo "ERROR: Please enter 1, 2, or 3." >&2
       exit 1
       ;;
   esac
@@ -54,7 +57,7 @@ case "${1:-}" in
   "")
     PROVIDER=$(pick_provider)
     ;;
-  claude|copilot)
+  claude|copilot|automation)
     PROVIDER="$1"
     ;;
   -h|--help)
@@ -120,6 +123,9 @@ if [[ "$PROVIDER" == "claude" ]]; then
     echo ""
     echo "${DIM}Next: confirm ANTHROPIC_API_KEY in config/.env is valid.${RESET}"
   fi
+elif [[ "$PROVIDER" == "automation" ]]; then
+  echo ""
+  echo "${DIM}Using automation only, no AI provider needed. start-workday will write raw calendar and GitHub data directly.${RESET}"
 else
   if command -v gh >/dev/null 2>&1; then
     echo ""

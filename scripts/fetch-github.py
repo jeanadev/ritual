@@ -12,7 +12,7 @@ Required scopes: Issues (read), Pull requests (read)
 import os
 import sys
 import warnings
-warnings.filterwarnings("ignore", category=Warning)
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="urllib3")
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -25,7 +25,7 @@ load_dotenv(ENV_FILE)
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GITHUB_ORG = os.getenv("GITHUB_ORG")
 GITHUB_USERNAME = os.getenv("GITHUB_USERNAME")
-GITHUB_TEAM = os.getenv("GITHUB_TEAM", "platform-design-system-a11y")
+GITHUB_TEAM = os.getenv("GITHUB_TEAM")
 
 REST_SEARCH_URL = "https://api.github.com/search/issues"
 
@@ -86,7 +86,7 @@ def fetch_review_requested_prs():
             data = resp.json()
             user_logins = [u["login"].lower() for u in data.get("users", [])]
             team_slugs = [t["slug"].lower() for t in data.get("teams", [])]
-            if GITHUB_USERNAME.lower() in user_logins or "platform-design-system-a11y" in team_slugs:
+            if GITHUB_USERNAME.lower() in user_logins or (GITHUB_TEAM and GITHUB_TEAM.lower() in team_slugs):
                 direct.append(pr)
         except Exception:
             # If we can't verify, include it rather than silently drop

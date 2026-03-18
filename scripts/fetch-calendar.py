@@ -19,7 +19,8 @@ import datetime
 import os
 import sys
 import warnings
-warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="google")
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="urllib3")
 import json
 from pathlib import Path
 
@@ -120,23 +121,23 @@ def detect_back_to_back(events, gap_minutes=15):
     return pairs
 
 
-def get_deep_work_windows(events, start_hour=6, end_hour=19, min_gap_minutes=60):
-    """Find unscheduled blocks >= min_gap_minutes."""
+def get_deep_work_windows(events):
+    """Find unscheduled blocks >= DEEP_WORK_MIN minutes."""
     windows = []
     day = local_now().date()
-    cursor = local_datetime(day, start_hour, DAY_START_MINUTE)
+    cursor = local_datetime(day, DAY_START_HOUR, DAY_START_MINUTE)
 
     for event in events:
         gap = event["start"] - cursor
-        if gap.total_seconds() / 60 >= min_gap_minutes:
+        if gap.total_seconds() / 60 >= DEEP_WORK_MIN:
             windows.append(
                 f"{cursor.strftime('%-I:%M%p').lower()}–{event['start'].strftime('%-I:%M%p').lower()}"
             )
         cursor = max(cursor, event["end"])
 
-    end_of_day = local_datetime(day, end_hour, DAY_END_MINUTE)
+    end_of_day = local_datetime(day, DAY_END_HOUR, DAY_END_MINUTE)
     gap = end_of_day - cursor
-    if gap.total_seconds() / 60 >= min_gap_minutes:
+    if gap.total_seconds() / 60 >= DEEP_WORK_MIN:
         windows.append(
             f"{cursor.strftime('%-I:%M%p').lower()}–{end_of_day.strftime('%-I:%M%p').lower()}"
         )
@@ -192,7 +193,7 @@ def main():
                 f"⚠️  Back-to-back: {a['line'].split('—')[0].strip()} → {b['line'].split('—')[0].strip()}"
             )
 
-    deep_windows = get_deep_work_windows(formatted, start_hour=DAY_START_HOUR, end_hour=DAY_END_HOUR, min_gap_minutes=DEEP_WORK_MIN)
+    deep_windows = get_deep_work_windows(formatted)
     if deep_windows:
         lines.append("")
         lines.append(f"🕐 Deep work window(s): {', '.join(deep_windows)}")

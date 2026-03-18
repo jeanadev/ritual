@@ -25,7 +25,6 @@ usage() {
 Usage: scripts/configure-github-account.sh [--username USERNAME] [--org ORG] [--project-number NUMBER]
 
 Updates the repo-local config/.env GitHub settings for this repository only.
-If the GitHub username changes, GITHUB_TOKEN is cleared so you can paste a token for the new account.
 EOF
 }
 
@@ -126,14 +125,9 @@ for line in lines:
     else:
         entries.append((None, line))
 
-old_username = values.get("GITHUB_USERNAME", "")
-username_changed = bool(old_username and old_username != new_username)
-
 values["GITHUB_USERNAME"] = new_username
 values["GITHUB_ORG"] = new_org
 values["GITHUB_PROJECT_NUMBER"] = new_project
-if username_changed:
-    values["GITHUB_TOKEN"] = ""
 
 written = set()
 output = []
@@ -141,36 +135,24 @@ for key, payload in entries:
     if key is None:
       output.append(payload)
       continue
-    if key in {"GITHUB_USERNAME", "GITHUB_ORG", "GITHUB_PROJECT_NUMBER", "GITHUB_TOKEN"}:
+    if key in {"GITHUB_USERNAME", "GITHUB_ORG", "GITHUB_PROJECT_NUMBER"}:
       if key not in written:
           output.append(f"{key}={values.get(key, '')}")
           written.add(key)
     else:
       output.append(f"{key}={payload}")
 
-for key in ["GITHUB_TOKEN", "GITHUB_ORG", "GITHUB_PROJECT_NUMBER", "GITHUB_USERNAME"]:
+for key in ["GITHUB_ORG", "GITHUB_PROJECT_NUMBER", "GITHUB_USERNAME"]:
     if key not in written and key in values:
         output.append(f"{key}={values.get(key, '')}")
 
 env_path.write_text("\n".join(output) + "\n")
-print("cleared-token" if username_changed else "kept-token")
 PYEOF
-> /tmp/ritual-github-account-result.txt
-
-RESULT=$(cat /tmp/ritual-github-account-result.txt)
-rm -f /tmp/ritual-github-account-result.txt
 
 echo ""
 echo "${GREEN}✓ Updated repo-local GitHub settings${RESET}"
 echo "${DIM}config/.env now targets ${USERNAME} in ${ORG}${RESET}"
-
 echo ""
-if [[ "$RESULT" == "cleared-token" ]]; then
-  echo "${YELLOW}GITHUB_TOKEN was cleared because the GitHub username changed.${RESET}"
-  echo "Create a new fine-grained PAT for ${USERNAME} and paste it into config/.env."
-else
-  echo "${DIM}If the existing token belongs to a different account, replace it in config/.env.${RESET}"
-fi
 
 echo ""
 echo "Required PAT permissions:"

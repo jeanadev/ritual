@@ -214,6 +214,13 @@ echo "${GREEN}✓ Scripts are executable${RESET}"
 
 "$CONFIGURE_GITHUB_ACCOUNT_SCRIPT"
 
+# Re-source .env so values written by configure-github-account.sh are live in this session
+if [[ -f "$CONFIG_DIR/.env" ]]; then
+  set -a
+  source "$CONFIG_DIR/.env"
+  set +a
+fi
+
 if [[ -n "$PROVIDER_ARG" ]]; then
   "$CONFIGURE_PROVIDER_SCRIPT" "$PROVIDER_ARG"
 else

@@ -23,6 +23,10 @@ BOLD='\033[1m'
 RESET='\033[0m'
 DIM='\033[2m'
 GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+
+CLEANUP_FILES=()
+trap 'rm -f "${CLEANUP_FILES[@]}"' EXIT
 
 echo ""
 echo "${BOLD}— end workday — $TODAY ($LOCAL_TIMEZONE) —${RESET}"
@@ -62,6 +66,7 @@ NOTEOF
 else
   # Write answers to a temp JSON file to safely handle quotes and special characters
   ANSWERS_FILE=$(mktemp /tmp/ritual-answers.XXXXXX.json)
+  CLEANUP_FILES+=("$ANSWERS_FILE")
   python3 -c "
 import json, sys
 data = {'day_word': sys.argv[1], 'win': sys.argv[2], 'tomorrow': sys.argv[3], 'today': sys.argv[4]}
@@ -104,7 +109,6 @@ with open(note_path, "w") as f:
 print("ok")
 PYEOF
 
-  rm -f "$ANSWERS_FILE"
 fi
 
 # ── 3. 1:1 notes (if applicable) ──────────────────────────────────────────────
@@ -116,7 +120,12 @@ if [[ -f "$ONEONE_MAP_FILE" ]]; then
 fi
 
 # Re-fetch today's raw calendar (stderr suppressed — warnings only)
-RAW_CALENDAR=$(python3 "$SCRIPT_DIR/fetch-calendar.py" 2>/dev/null || echo "")
+RAW_CALENDAR=$(python3 "$SCRIPT_DIR/fetch-calendar.py" 2>/dev/null) || {
+  if [[ ${#ONEONE_MAP[@]} -gt 0 ]]; then
+    echo "${YELLOW}⚠️  Calendar fetch failed — skipping 1:1 detection.${RESET}"
+  fi
+  RAW_CALENDAR=""
+}
 
 ONEONE_NAMES=()
 for TITLE in "${(@k)ONEONE_MAP}"; do

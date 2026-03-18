@@ -114,8 +114,6 @@ GitHub → Settings → Developer Settings → Personal access tokens → Fine-g
 
 Paste the token for the selected repo-local GitHub account into `config/.env` as `GITHUB_TOKEN`.
 
-If you switch `GITHUB_USERNAME` to a different account with `configure-github-account.sh`, the helper clears `GITHUB_TOKEN` on purpose so you do not accidentally reuse a token from the wrong account.
-
 **Note:** `GITHUB_PROJECT_NUMBER` is in `.env.example` for reference but is no longer used — the GitHub fetch uses REST search, not Projects v2 GraphQL.
 
 ### 7. Copilot login (only if using `briefing.provider = "copilot"`)

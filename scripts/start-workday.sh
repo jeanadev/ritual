@@ -80,6 +80,9 @@ DIM='\033[2m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 
+CLEANUP_FILES=()
+trap 'rm -f "${CLEANUP_FILES[@]}"' EXIT
+
 mkdir -p "$NOTES_DIR"
 
 echo ""
@@ -134,7 +137,17 @@ for DAYS_BACK in 1 2 3 4; do
   PAST_DATE=$(get_past_date "$DAYS_BACK")
   PAST_NOTE="$NOTES_DIR/$PAST_DATE.md"
   if [[ -f "$PAST_NOTE" ]]; then
-    TOMORROW_VALUE=$(awk '/^---/{f++} f==1 && /^tomorrow:/{sub(/^tomorrow: */, ""); print; exit}' "$PAST_NOTE")
+    TOMORROW_VALUE=$(python3 - "$PAST_NOTE" <<'PYEOF'
+import re, sys
+content = open(sys.argv[1]).read()
+match = re.match(r"^---\n(.*?)\n---\n", content, re.DOTALL)
+if match:
+    for line in match.group(1).splitlines():
+        if line.startswith("tomorrow:"):
+            print(line[len("tomorrow:"):].strip())
+            break
+PYEOF
+)
     if [[ -n "$TOMORROW_VALUE" ]]; then
       CARRY_FORWARD="\"$TOMORROW_VALUE\"\n— from $PAST_DATE"
       break
@@ -222,6 +235,7 @@ ${ONEONE_BLOCK:-"(no 1:1s today)"}"
 echo "${DIM}Generating briefing with ${BRIEFING_PROVIDER}...${RESET}"
 
 PROMPT_FILE=$(mktemp /tmp/ritual-prompt.XXXXXX.json)
+CLEANUP_FILES+=("$PROMPT_FILE")
 python3 -c "
 import json, sys
 data = {'system': sys.argv[1], 'user': sys.argv[2]}
@@ -247,6 +261,7 @@ PYEOF
   )
 
   RESPONSE_FILE=$(mktemp /tmp/ritual-response.XXXXXX.json)
+  CLEANUP_FILES+=("$RESPONSE_FILE")
 
   curl -s -X POST "https://api.anthropic.com/v1/messages" \
     -H "x-api-key: $ANTHROPIC_API_KEY" \
@@ -273,19 +288,17 @@ PYEOF
   ) || {
     echo "ERROR: Anthropic API call failed." >&2
     cat "$RESPONSE_FILE" >&2
-    rm -f "$PROMPT_FILE" "$RESPONSE_FILE"
     exit 1
   }
 
-  rm -f "$RESPONSE_FILE"
 else
   if ! command -v gh >/dev/null 2>&1; then
     echo "ERROR: gh CLI not found. Install GitHub CLI to use briefing.provider=copilot." >&2
-    rm -f "$PROMPT_FILE"
     exit 1
   fi
 
   COPILOT_PROMPT_FILE=$(mktemp /tmp/ritual-copilot-prompt.XXXXXX.txt)
+  CLEANUP_FILES+=("$COPILOT_PROMPT_FILE")
   python3 - "$PROMPT_FILE" "$COPILOT_PROMPT_FILE" <<'PYEOF'
 import json, sys
 
@@ -304,6 +317,7 @@ with open(sys.argv[2], "w") as f:
 PYEOF
 
   COPILOT_ERR_FILE=$(mktemp /tmp/ritual-copilot-err.XXXXXX.txt)
+  CLEANUP_FILES+=("$COPILOT_ERR_FILE")
   BRIEFING=$(env -u GITHUB_TOKEN -u GH_TOKEN -u COPILOT_GITHUB_TOKEN gh copilot \
     --model "$COPILOT_MODEL" \
     --disable-builtin-mcps \
@@ -315,14 +329,10 @@ PYEOF
     2>"$COPILOT_ERR_FILE") || {
       echo "ERROR: GitHub Copilot CLI call failed." >&2
       cat "$COPILOT_ERR_FILE" >&2
-      rm -f "$PROMPT_FILE" "$COPILOT_PROMPT_FILE" "$COPILOT_ERR_FILE"
       exit 1
     }
 
-  rm -f "$COPILOT_PROMPT_FILE" "$COPILOT_ERR_FILE"
 fi
-
-rm -f "$PROMPT_FILE"
 
 # ── 7. Write daily note ────────────────────────────────────────────────────────
 

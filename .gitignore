@@ -1,4 +1,5 @@
 config/.env
+config/oneone-map.zsh
 config/credentials.json
 config/token.json
 notes/

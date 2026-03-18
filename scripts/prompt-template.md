@@ -1,6 +1,6 @@
 # Daily Briefing — Prompt Template (Phase 1 Manual)
 
-Use this each morning in claude.ai. Fill in the three input sections, paste the whole thing, send it.
+Use this each morning in Claude or Copilot Chat. Fill in the three input sections, paste the whole thing, send it.
 
 ---
 

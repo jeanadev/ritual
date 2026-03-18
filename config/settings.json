@@ -8,9 +8,15 @@
     "deep_work_min_minutes": 60
   },
   "github": {
-    "active_statuses": ["ready to work", "in progress"]
+    "active_statuses": [
+      "ready to work",
+      "in progress"
+    ]
   },
   "briefing": {
+    "provider": "copilot",
+    "anthropic_model": "claude-sonnet-4-20250514",
+    "copilot_model": "gpt-5.4",
     "max_tokens": 1024
   }
 }

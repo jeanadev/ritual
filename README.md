@@ -3,7 +3,7 @@
 Two-command workday bookend: structured morning briefing + lightweight evening reflection.
 
 ```
-start-workday  →  brain dump + calendar + GitHub → Claude → daily note (opens in VS Code)
+start-workday  →  brain dump + calendar + GitHub → Claude or Copilot → daily note (opens in VS Code)
 end-workday    →  3 questions → frontmatter → carry-forward loop + 1:1 notes
 ```
 
@@ -20,20 +20,88 @@ mv ritual ~/ritual
 cd ~/ritual
 ```
 
-### 2. Python dependencies
+### 2. First run
+
+Recommended:
+
+```zsh
+./scripts/first-run.sh
+```
+
+You can also pick a provider up front:
+
+```zsh
+./scripts/first-run.sh claude
+./scripts/first-run.sh copilot
+```
+
+To verify prerequisites without changing anything:
+
+```zsh
+./scripts/first-run.sh --check
+```
+
+`first-run.sh` installs Python dependencies, creates `config/.env` if needed, makes the scripts executable, and routes you through provider setup.
+
+### 3. Python dependencies
 
 ```zsh
 pip3 install google-auth-oauthlib google-auth-httplib2 google-api-python-client python-dotenv requests
 ```
 
-### 3. Config
+### 4. Config
 
 ```zsh
 cp config/.env.example config/.env
-# Edit config/.env — fill in all five values
 ```
 
-### 4. GitHub token
+Set the repo-local GitHub account for this repository:
+
+```zsh
+./scripts/configure-github-account.sh --username your-username --org your-org --project-number your-project-number
+```
+
+Or run it with no arguments for prompts:
+
+```zsh
+./scripts/configure-github-account.sh
+```
+
+This repo uses `config/.env` as its GitHub API identity, so switching this file does not affect your other GitHub account setup elsewhere on the machine. `ANTHROPIC_API_KEY` is required only if you keep the Claude provider.
+
+### 5. Choose your briefing provider
+
+Use the helper:
+
+```zsh
+./scripts/configure-provider.sh
+```
+
+Or set it directly:
+
+```json
+"briefing": {
+  "provider": "claude"
+}
+```
+
+Set `"provider"` to:
+
+- `"claude"` to call Anthropic directly
+- `"copilot"` to generate the briefing with GitHub Copilot CLI via `gh copilot`
+
+Optional model settings also live in `config/settings.json`:
+
+```json
+"briefing": {
+  "provider": "copilot",
+  "anthropic_model": "claude-sonnet-4-20250514",
+  "copilot_model": "gpt-5.4",
+  "max_tokens": 1024
+}
+```
+
+### 6. GitHub token
 
 GitHub → Settings → Developer Settings → Personal access tokens → Fine-grained tokens
 
@@ -44,11 +112,21 @@ GitHub → Settings → Developer Settings → Personal access tokens → Fine-g
   - Pull requests: Read (under Repository permissions)
   - Projects: Read (under Organization permissions)
 
-Paste the token into `config/.env` as `GITHUB_TOKEN`.
+Paste the token for the selected repo-local GitHub account into `config/.env` as `GITHUB_TOKEN`.
 
 **Note:** `GITHUB_PROJECT_NUMBER` is in `.env.example` for reference but is no longer used — the GitHub fetch uses REST search, not Projects v2 GraphQL.
 
-### 5. Google Calendar OAuth (allow 60–90 min the first time)
+### 7. Copilot login (only if using `briefing.provider = "copilot"`)
+
+GitHub Copilot mode requires an active Copilot subscription and an authenticated CLI session.
+
+```zsh
+gh copilot
+```
+
+If prompted, complete the login flow in the Copilot CLI. `gh copilot` will download the CLI automatically if needed.
+
+### 8. Google Calendar OAuth (allow 60–90 min the first time)
 
 1. Go to [console.cloud.google.com](https://console.cloud.google.com)
 2. Create a new project
@@ -64,13 +142,13 @@ Paste the token into `config/.env` as `GITHUB_TOKEN`.
 
 After first run, token refreshes automatically.
 
-### 6. Make scripts executable
+### 9. Make scripts executable
 
 ```zsh
-chmod +x scripts/start-workday.sh scripts/end-workday.sh
+chmod +x scripts/start-workday.sh scripts/end-workday.sh scripts/configure-provider.sh scripts/configure-github-account.sh scripts/first-run.sh
 ```
 
-### 7. Shell aliases (recommended)
+### 10. Shell aliases (recommended)
 
 Add to your `~/.zshrc`:
 
@@ -81,14 +159,19 @@ alias end-workday="~/ritual/scripts/end-workday.sh"
 
 Then `source ~/.zshrc`.
 
-### 8. Configure your 1:1s
+### 11. Configure your 1:1s
 
-In both `end-workday.sh` and `start-workday.sh`, update the `ONEONE_MAP` to match your exact Google Calendar meeting titles:
+Copy the local template if `first-run.sh` has not already done it:
 
 ```zsh
-declare -A ONEONE_MAP=(
+cp config/oneone-map.zsh.example config/oneone-map.zsh
+```
+
+Then edit `config/oneone-map.zsh` to match your exact Google Calendar meeting titles:
+
+```zsh
+declare -gA ONEONE_MAP=(
   ["Person / YourName"]="Person"
-  ...
 )
 ```
 
@@ -104,7 +187,7 @@ start-workday
 ```
 - Type your brain dump, hit return twice when done
 - Calendar and GitHub are fetched automatically
-- Claude generates a structured briefing
+- Your selected provider generates a structured briefing
 - Daily note written to `notes/YYYY-MM-DD.md` and opened in VS Code
 - Note includes a verbatim **PR Review Queue** section with links at the bottom
 
@@ -184,11 +267,13 @@ notes/
 
 **GitHub fetch hangs:** The script uses REST search, not GraphQL pagination — should return in seconds. Check your token is valid and has Issues + Pull requests read permissions.
 
-**GitHub PR list includes unwanted team-tagged PRs:** Update the team slug in `fetch-github.py` to match your team exactly.
+**Copilot briefing fails:** Run `gh copilot` once manually and complete login. Confirm you have an active Copilot subscription and that `config/settings.json` has `"provider": "copilot"`.
 
-**1:1 prompts not appearing:** The calendar event title must exactly match a key in `ONEONE_MAP` in `end-workday.sh`. Match is case-sensitive.
+**GitHub PR list includes unwanted team-tagged PRs:** Set `GITHUB_TEAM=your-team-slug` in `config/.env` to match your team exactly. If `GITHUB_TEAM` is not set, only direct review requests (where you are tagged individually) are included.
 
-**API key error:** Confirm `ANTHROPIC_API_KEY` starts with `sk-ant-` and is active at console.anthropic.com.
+**1:1 prompts not appearing:** The calendar event title must exactly match a key in `config/oneone-map.zsh`. Match is case-sensitive.
+
+**Claude API key error:** Confirm `ANTHROPIC_API_KEY` starts with `sk-ant-` and is active at console.anthropic.com, or switch `briefing.provider` to `"copilot"` if you do not want to use Anthropic.
 
 **Daily note doesn't update in VS Code:** VS Code doesn't auto-reload externally modified files. Close and reopen the file after running `end-workday`.
 

@@ -245,6 +245,49 @@ ${ONEONE_BLOCK:-"(no 1:1s today)"}"
 
 # ── 6. Generate briefing via selected provider ────────────────────────────────
 
+if [[ "$BRIEFING_PROVIDER" == "none" ]]; then
+  echo "${DIM}Skipping AI briefing (provider=none). Writing raw data to note.${RESET}"
+
+  CARRY_SECTION=""
+  if [[ "$CARRY_FORWARD" != "(none)" ]]; then
+    CARRY_SECTION="## Carry-Forward
+
+$CARRY_FORWARD"
+  fi
+
+  ONEONE_SECTION=""
+  if [[ -n "$ONEONE_BLOCK" ]]; then
+    ONEONE_SECTION="## 1:1 Prep
+
+$ONEONE_BLOCK"
+  fi
+
+  BRIEFING="## Brain Dump
+
+$BRAIN_DUMP
+
+## Schedule
+
+$CALENDAR_BLOCK
+
+## GitHub
+
+$GITHUB_BLOCK"
+
+  if [[ -n "$CARRY_SECTION" ]]; then
+    BRIEFING="$BRIEFING
+
+$CARRY_SECTION"
+  fi
+
+  if [[ -n "$ONEONE_SECTION" ]]; then
+    BRIEFING="$BRIEFING
+
+$ONEONE_SECTION"
+  fi
+
+else
+
 echo "${DIM}Generating briefing with ${BRIEFING_PROVIDER}...${RESET}"
 
 PROMPT_FILE=$(mktemp /tmp/ritual-prompt.XXXXXX.json)
@@ -346,6 +389,8 @@ PYEOF
     }
 
 fi
+
+fi # end provider block
 
 # ── 7. Write daily note ────────────────────────────────────────────────────────
 

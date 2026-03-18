@@ -69,9 +69,9 @@ PYEOF
 EOF
 
 case "$BRIEFING_PROVIDER" in
-  claude|copilot) ;;
+  claude|copilot|automation) ;;
   *)
-    echo "ERROR: briefing.provider must be 'claude' or 'copilot' in config/settings.json." >&2
+    echo "ERROR: briefing.provider must be 'claude', 'copilot', or 'automation' in config/settings.json." >&2
     exit 1
     ;;
 esac
@@ -138,6 +138,8 @@ GITHUB_BLOCK=$(python3 "$SCRIPTS_DIR/fetch-github.py" 2>"$GH_ERR_FILE") || {
   GITHUB_BLOCK="(GitHub unavailable — fetch failed)"
 }
 
+# Split GitHub output so automation mode can avoid duplicating the PR queue.
+GITHUB_MAIN_BLOCK=$(echo "$GITHUB_BLOCK" | awk 'BEGIN{in_prs=0} /^### PRs/{in_prs=1} !in_prs{print}')
 # Extract just the PR section for verbatim append to note
 PR_BLOCK=$(echo "$GITHUB_BLOCK" | awk '/^### PRs/,0')
 
@@ -245,8 +247,8 @@ ${ONEONE_BLOCK:-"(no 1:1s today)"}"
 
 # ── 6. Generate briefing via selected provider ────────────────────────────────
 
-if [[ "$BRIEFING_PROVIDER" == "none" ]]; then
-  echo "${DIM}Skipping AI briefing (provider=none). Writing raw data to note.${RESET}"
+if [[ "$BRIEFING_PROVIDER" == "automation" ]]; then
+  echo "${DIM}Skipping AI briefing (provider=automation). Writing raw data to note.${RESET}"
 
   CARRY_SECTION=""
   if [[ "$CARRY_FORWARD" != "(none)" ]]; then
@@ -272,7 +274,7 @@ $CALENDAR_BLOCK
 
 ## GitHub
 
-$GITHUB_BLOCK"
+$GITHUB_MAIN_BLOCK"
 
   if [[ -n "$CARRY_SECTION" ]]; then
     BRIEFING="$BRIEFING

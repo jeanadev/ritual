@@ -3,7 +3,7 @@
 Two-command workday bookend: structured morning briefing + lightweight evening reflection.
 
 ```
-start-workday  →  brain dump + calendar + GitHub → Claude, Copilot, or none → daily note (opens in VS Code)
+start-workday  →  brain dump + calendar + GitHub → Claude, Copilot, or automation → daily note (opens in VS Code)
 end-workday    →  3 questions → frontmatter → carry-forward loop + 1:1 notes
 ```
 
@@ -89,7 +89,7 @@ Set `"provider"` to:
 
 - `"claude"` to call Anthropic directly
 - `"copilot"` to generate the briefing with GitHub Copilot CLI via `gh copilot`
-- `"none"` to skip AI entirely — calendar, GitHub, carry-forward, and 1:1 prep are still fetched and written to the note as raw data
+- `"automation"` to skip AI entirely — calendar, GitHub, carry-forward, and 1:1 prep are still fetched and written to the note as raw data
 
 Optional model settings also live in `config/settings.json`:
 
@@ -188,7 +188,7 @@ start-workday
 ```
 - Type your brain dump, hit return twice when done
 - Calendar and GitHub are fetched automatically
-- Your selected provider generates a structured briefing
+- Your selected provider generates a structured briefing, or raw automation output if `briefing.provider` is `"automation"`
 - Daily note written to `notes/YYYY-MM-DD.md` and opened in VS Code
 - Note includes a verbatim **PR Review Queue** section with links at the bottom
 
@@ -274,9 +274,9 @@ notes/
 
 **1:1 prompts not appearing:** The calendar event title must exactly match a key in `config/oneone-map.zsh`. Match is case-sensitive.
 
-**Claude API key error:** Confirm `ANTHROPIC_API_KEY` starts with `sk-ant-` and is active at console.anthropic.com, or switch `briefing.provider` to `"copilot"` or `"none"` if you do not want to use Anthropic.
+**Claude API key error:** Confirm `ANTHROPIC_API_KEY` starts with `sk-ant-` and is active at console.anthropic.com, or switch `briefing.provider` to `"copilot"` or `"automation"` if you do not want to use Anthropic.
 
-**Want to run without any AI:** Run `./scripts/configure-provider.sh` and select option 3, or set `"provider": "none"` in `config/settings.json`. All automation runs normally; the note will contain your brain dump, raw calendar, and GitHub data instead of an AI-generated briefing.
+**Want to run without any AI:** Run `./scripts/configure-provider.sh` and select option 3, or set `"provider": "automation"` in `config/settings.json`. All automation runs normally; the note will contain your brain dump, raw calendar, and GitHub data instead of an AI-generated briefing.
 
 **Daily note doesn't update in VS Code:** VS Code doesn't auto-reload externally modified files. Close and reopen the file after running `end-workday`.
 

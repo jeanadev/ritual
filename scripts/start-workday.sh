@@ -139,9 +139,9 @@ GITHUB_BLOCK=$(python3 "$SCRIPTS_DIR/fetch-github.py" 2>"$GH_ERR_FILE") || {
 }
 
 # Split GitHub output so automation mode can avoid duplicating the PR queue.
-GITHUB_MAIN_BLOCK=$(echo "$GITHUB_BLOCK" | awk 'BEGIN{in_prs=0} /^### PRs/{in_prs=1} !in_prs{print}')
+GITHUB_MAIN_BLOCK=$(print -r -- "$GITHUB_BLOCK" | awk 'BEGIN{in_prs=0} /^### PRs/{in_prs=1} !in_prs{print}')
 # Extract just the PR section for verbatim append to note
-PR_BLOCK=$(echo "$GITHUB_BLOCK" | awk '/^### PRs/,0')
+PR_BLOCK=$(print -r -- "$GITHUB_BLOCK" | awk '/^### PRs/,0')
 
 # ── 4. Carry-forward from last working day ───────────────────────────────────
 # Looks back up to 4 days to handle weekends and long weekends
@@ -164,7 +164,7 @@ if match:
 PYEOF
 )
     if [[ -n "$TOMORROW_VALUE" ]]; then
-      CARRY_FORWARD="\"$TOMORROW_VALUE\""${'\n'}"— from $PAST_DATE"
+      CARRY_FORWARD="\"$TOMORROW_VALUE\""$'\n'"— from $PAST_DATE"
       break
     fi
   fi

@@ -33,6 +33,7 @@ You can also pick a provider up front:
 ```zsh
 ./scripts/first-run.sh claude
 ./scripts/first-run.sh copilot
+./scripts/first-run.sh automation
 ```
 
 To verify prerequisites without changing anything:

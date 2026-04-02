@@ -68,3 +68,35 @@ The persistent data model is plain markdown under `notes/`. Daily notes contain 
 - When passing rich text or API responses through shell, follow the existing temp-file pattern instead of embedding multiline JSON directly in shell variables. Both shell scripts rely on Python helpers plus `mktemp` to avoid quote/newline breakage.
 - `fetch-calendar.py` and `fetch-github.py` are consumed by shell via stdout, so avoid adding non-data prints to stdout. If warnings are unavoidable, send them to stderr.
 - `config/settings.json` is the tunable runtime config file in the repo; calendar window, deep-work thresholds, and briefing provider/model selection belong there instead of being hardcoded elsewhere.
+
+## Daily note structure
+
+Every daily note at `notes/YYYY-MM-DD.md` has this exact shape — do not invent new frontmatter keys or reorder sections:
+
+```markdown
+---
+date: YYYY-MM-DD
+day_word: ""
+win: ""
+tomorrow: ""
+---
+
+## Brain Dump
+
+## Schedule
+
+## GitHub
+
+## Briefing
+
+## PR Review Queue
+```
+
+`start-workday.sh` writes the file with blank frontmatter values and populates the body sections. `end-workday.sh` fills in `day_word`, `win`, and `tomorrow` in place via Python regex — do not change the key names or quoting style.
+
+## What not to do
+
+- **Never commit `config/.env` or `config/oneone-map.zsh`.** Both are gitignored and contain personal data (tokens, meeting names). If either file is missing, the scripts print a clear error rather than creating them automatically.
+- **Never add `print()` or `logging` output to stdout in `fetch-calendar.py` or `fetch-github.py`.** These scripts are consumed by shell via stdout capture; any extra output will corrupt the briefing. Send warnings to stderr instead.
+- **Never hardcode personal names, meeting titles, or org-specific values in committed scripts.** They belong in `config/oneone-map.zsh` (names/titles) or `config/.env` (org, username, team).
+- **Never stage files under `notes/`.** Daily notes and 1:1 carry-forward notes contain personal reflection data and should not be committed.

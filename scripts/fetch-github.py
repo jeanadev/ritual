@@ -27,7 +27,7 @@ GITHUB_ORG = os.getenv("GITHUB_ORG")
 GITHUB_USERNAME = os.getenv("GITHUB_USERNAME")
 GITHUB_TEAM = os.getenv("GITHUB_TEAM")
 
-REST_SEARCH_URL = "https://api.github.com/search/issues"
+REST_SEARCH_URL = "https://va.ghe.com/api/v3/search/issues"
 
 HEADERS = {
     "Authorization": f"Bearer {GITHUB_TOKEN}",
@@ -77,8 +77,8 @@ def fetch_review_requested_prs():
     for pr in candidates:
         # Parse repo owner/name from repository_url
         # e.g. https://api.github.com/repos/org/repo-name
-        repo_path = pr["repository_url"].replace("https://api.github.com/repos/", "")
-        reviewers_url = f"https://api.github.com/repos/{repo_path}/pulls/{pr['number']}/requested_reviewers"
+        repo_path = pr["repository_url"].replace("https://va.ghe.com/api/v3/repos/", "")
+        reviewers_url = f"https://va.ghe.com/api/v3/repos/{repo_path}/pulls/{pr['number']}/requested_reviewers"
 
         try:
             resp = requests.get(reviewers_url, headers=HEADERS, timeout=10)
